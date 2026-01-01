@@ -1,18 +1,15 @@
-# Temporary session files
+# Session files
 /tmp/portable_session_*
-
-# Log files
-*.log
+/session_*
 *.cap
 *.ivs
 *.csv
 *.kismet.*
+*.hccapx
+hashcat.potfile
+*.log
 
-# Session output
-/session_*
-/portable_session_*
-
-# Editor files
-*.swp
+# Editor
 *~
+*.swp
 .DS_Store
