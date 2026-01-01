@@ -32,3 +32,9 @@
 ```bash
 sudo apt update
 sudo apt install aircrack-ng reaver
+
+git clone repo ino
+cd wifi-toolkit
+chmod +x install.sh wifitoolkit.sh
+sudo ./install.sh
+sudo ./wifitoolkit.sh
