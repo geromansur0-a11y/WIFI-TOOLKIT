@@ -33,7 +33,7 @@
 sudo apt update
 sudo apt install aircrack-ng reaver
 
-git clone repo ino
+git clone https://github.com/geromansur0-a11y/WIFI-TOOLKIT.git
 cd wifi-toolkit
 chmod +x install.sh wifitoolkit.sh
 sudo ./install.sh
