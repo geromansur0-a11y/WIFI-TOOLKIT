@@ -1,8 +1,5 @@
 
-#**`LICENSE`** — MIT License
-
-```text
-MIT License
+# MIT License
 
 Copyright (c) 2026 Adikoto IndoCreative.Ltd
 
